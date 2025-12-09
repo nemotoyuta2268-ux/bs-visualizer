@@ -127,8 +127,22 @@ def render_company_analysis(ticker, data, key_suffix="", show_metrics=True):
         st.plotly_chart(fig, use_container_width=True, key=f"chart_{ticker}_{key_suffix}")
 
 # Application Header
-# ... exist code ... (skipping to main)
+st.title("📊 貸借対照表（B/S）ビジュアライザー")
+st.markdown("証券コードを入力して、企業の財務健全性を可視化します。")
 
+# Sidebar
+st.sidebar.header("設定")
+ticker1 = st.sidebar.text_input("証券コード (メイン)", value="") # No default
+
+# Comparison Toggle
+compare_mode = st.sidebar.checkbox("他社と比較する", value=False)
+ticker2 = ""
+if compare_mode:
+    ticker2 = st.sidebar.text_input("証券コード (比較対象)", value="") # No default
+
+analyze_btn = st.sidebar.button("分析開始", type="primary")
+
+# Main Area
 if analyze_btn:
     if not ticker1:
          st.warning("証券コードを入力してください。")

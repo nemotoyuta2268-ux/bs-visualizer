@@ -149,3 +149,25 @@ li,
     border-radius: 8px;
     border: 1px solid #e0e0e0;
 }
+
+/* Sidebar Visibility Fix */
+[data-testid="stSidebar"] {
+    background-color: #f8f9fa;
+    /* Light grey sidebar */
+}
+
+/* Force dark text in Sidebar */
+[data-testid="stSidebar"] h1,
+[data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3,
+[data-testid="stSidebar"] p,
+[data-testid="stSidebar"] span,
+[data-testid="stSidebar"] label,
+[data-testid="stSidebar"] div {
+    color: #333333 !important;
+}
+
+/* Fix Input Label in Sidebar specifically */
+.stMarkdown label p {
+    color: #333333 !important;
+}
