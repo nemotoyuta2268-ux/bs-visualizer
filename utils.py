@@ -4,18 +4,7 @@ import datetime
 import os
 import io
 import zipfile
-import collections
-
-# Monkey patch for edinet-xbrl compatibility with Python 3.10+
-if not hasattr(collections, 'Iterable'):
-    import collections.abc
-    collections.Iterable = collections.abc.Iterable
-
-import xml.etree.ElementTree as ET
-if not hasattr(ET.Element, 'getchildren'):
-    ET.Element.getchildren = lambda self: list(self)
-
-from edinet_xbrl.edinet_xbrl_parser import EdinetXbrlParser
+from bs4 import BeautifulSoup
 
 # Constants
 EDINET_API_KEY = "c4ce27d66c84409d868224b250accfd5"
@@ -90,25 +79,6 @@ def get_edinet_code(ticker, code_list_df):
     # Ensure ticker is string
     ticker = str(ticker)
     
-    # Try to find where '証券コード' starts with ticker
-    # Filter where '証券コード' divides by 10 is the ticker? 
-    # Or just string match.
-    
-    if len(ticker) == 4:
-        ticker5 = ticker + "0"
-    else:
-        ticker5 = ticker
-
-    # Column names in EdinetCodeDlInfo.csv (approximate):
-    # [EdinetCode, SubmitType, SecCode, JCN, OrgName, ...]
-    # '証券コード' is usually index 2?
-    
-    # Let's assume standard columns. 
-    # We will look for a row where '証券コード' == ticker5
-    
-    # Check columns
-    # Actually, let's just loop or use pandas string search
-    
     # Normalize column names if possible or guess
     cols = code_list_df.columns
     sec_code_col = [c for c in cols if "証券コード" in c]
@@ -119,9 +89,6 @@ def get_edinet_code(ticker, code_list_df):
         
     sec_col = sec_code_col[0]
     edinet_col = edinet_code_col[0]
-    
-    # Search
-    # The csv might have non-listed companies without sec code.
     
     target = code_list_df[code_list_df[sec_col].astype(str).str.startswith(ticker, na=False)]
     if not target.empty:
@@ -212,10 +179,6 @@ def fetch_financial_data(ticker_code):
         return {"error": "Failed to download document"}
         
     # Process Zip
-    # We need to extract the xbrl file.
-    # edinet-xbrl library needs a path or file-like?
-    # Parser.parse(file_path)
-    
     # Save zip temporarily
     zip_path = f"doc_{doc_id}.zip"
     with open(zip_path, "wb") as f:
@@ -240,66 +203,107 @@ def fetch_financial_data(ticker_code):
     if not xbrl_file:
          return {"error": "XBRL file not found in archive"}
 
-    # Parse
-    parser = EdinetXbrlParser()
-    parsed_xbrl = parser.parse(xbrl_file)
-    
-    # Extract Key BS Items
-    # Context 'CurrentYearInstant' (usually)
-    # Keys for Assets, Liabilities, NetAssets
-    
-    # Standard labels (approximate, context needs checking)
-    # We'll use get_data_by_cxt_and_tag if possible or simple lookup
-    
-    # Simplification: Get value for 'jppfs_cor:Assets', etc.
-    # Context ref is tricky. Usually 'CurrentYearInstant' or similar.
-    # edinet-xbrl returns a list of objects?
-    
-    # Helper to find value
-    def get_value(key):
-        val = parsed_xbrl.get_data_by_tag(key)
-        if val:
-            # val is a list of tuples? or list of objects?
-            # Library returns list of values found?
-            # Let's inspect ONE value.
-            # Ideally filter by context 'CurrentYearInstant'
-            for v in val:
-                context = v.get_context_ref()
-                if "CurrentYearInstant" in context or "CurrentYearDuration" not in context: # Primitive check
-                     value = v.get_value()
-                     if value:
-                         return int(value)
-        return 0
+    # Parse using BeautifulSoup
+    try:
+        with open(xbrl_file, "r", encoding="utf-8") as f:
+            soup = BeautifulSoup(f, "lxml-xml") # Use lxml XML parser
+            
+        def get_val_by_tag(tags, soup):
+            # Prefer 'CurrentYearInstant' context if possible
+            # Context handling is complex, so we will try a heuristic:
+            # 1. Find all tags
+            # 2. Prefer context that ends with 'CurrentYearInstant' (common in EDINET)
+            # 3. Fallback to just finding the first one
+            
+            candidates = []
+            for tag in tags:
+                # Namespace handling in BS4 with lxml can be tricky.
+                # Tag might be 'jppfs_cor:CurrentAssets' or just 'CurrentAssets' depending on parser
+                # Let's search by local name or regex?
+                # Using find_all with name=...
+                
+                # Split tag to get local name
+                local_name = tag.split(":")[-1]
+                found = soup.find_all(local_name)
+                
+                for el in found:
+                    candidates.append(el)
+            
+            if not candidates:
+                return 0
+                
+            # Filter candidates
+            best_val = 0
+            
+            for el in candidates:
+                context_ref = el.get("contextRef", "")
+                val_str = el.text.strip()
+                if not val_str:
+                    continue
+                try:
+                    val = float(val_str)
+                except:
+                    continue
+                    
+                # HEURISTIC: Check context
+                # Prioritize 'CurrentYearInstant' or 'CurrentYearDuration' (though BS is Instant)
+                # Avoid 'PriorYear'
+                if "Prior" in context_ref:
+                    continue
+                    
+                if "CurrentYear" in context_ref or "CurrentQuarter" in context_ref:
+                     return int(val)
+                     
+                # Fallback: keep non-zero
+                if best_val == 0:
+                    best_val = int(val)
+                    
+            return best_val
 
-    # IFRS Tags
-    ifrs_tags = {
-        "CurrentAssets": ["jppfs_cor:CurrentAssets", "ifrs-full:AssetsCurrent"],
-        "NonCurrentAssets": ["jppfs_cor:NonCurrentAssets", "ifrs-full:AssetsNonCurrent"],
-        "CurrentLiabilities": ["jppfs_cor:CurrentLiabilities", "ifrs-full:LiabilitiesCurrent"],
-        "NonCurrentLiabilities": ["jppfs_cor:NonCurrentLiabilities", "ifrs-full:LiabilitiesNonCurrent"],
-        "NetAssets": ["jppfs_cor:NetAssets", "ifrs-full:Equity"],
-    }
-
-    def get_value_multitags(key_list):
-        for key in key_list:
-            v = get_value(key)
-            if v and v > 0:
-                return v
-        return 0
-
-    data = {
-        "CurrentAssets": get_value_multitags(ifrs_tags["CurrentAssets"]),
-        "NonCurrentAssets": get_value_multitags(ifrs_tags["NonCurrentAssets"]),
-        "CurrentLiabilities": get_value_multitags(ifrs_tags["CurrentLiabilities"]),
-        "NonCurrentLiabilities": get_value_multitags(ifrs_tags["NonCurrentLiabilities"]),
-        "NetAssets": get_value_multitags(ifrs_tags["NetAssets"]),
-    }
+        # Tags
+        # JP GAAP
+        jp_tags = {
+            "CurrentAssets": ["jppfs_cor:CurrentAssets"],
+            "NonCurrentAssets": ["jppfs_cor:NonCurrentAssets"],
+            "CurrentLiabilities": ["jppfs_cor:CurrentLiabilities"],
+            "NonCurrentLiabilities": ["jppfs_cor:NonCurrentLiabilities"],
+            "NetAssets": ["jppfs_cor:NetAssets"],
+        }
+        
+        # IFRS Tags
+        ifrs_tags = {
+            "CurrentAssets": ["ifrs-full:AssetsCurrent"],
+            "NonCurrentAssets": ["ifrs-full:AssetsNonCurrent"],
+            "CurrentLiabilities": ["ifrs-full:LiabilitiesCurrent"],
+            "NonCurrentLiabilities": ["ifrs-full:LiabilitiesNonCurrent"],
+            "NetAssets": ["ifrs-full:Equity"],
+        }
+        
+        # Check taxonomy (lazy check)
+        # Try JP first, if 0 try IFRS
+        
+        data = {}
+        
+        def get_combined(key):
+            v = get_val_by_tag(jp_tags[key], soup)
+            if v == 0:
+                v = get_val_by_tag(ifrs_tags[key], soup)
+            return v
+            
+        data["CurrentAssets"] = get_combined("CurrentAssets")
+        data["NonCurrentAssets"] = get_combined("NonCurrentAssets")
+        data["CurrentLiabilities"] = get_combined("CurrentLiabilities")
+        data["NonCurrentLiabilities"] = get_combined("NonCurrentLiabilities")
+        data["NetAssets"] = get_combined("NetAssets")
+        
+        return data
+        
+    except Exception as e:
+        return {"error": "Parsing Failed", "details": str(e)}
     
     # Cleanup
     # shutil.rmtree(extract_dir) # Maybe later
     # os.remove(zip_path)
-
-    return data
 
 if __name__ == "__main__":
     # Test
