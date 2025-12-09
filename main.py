@@ -24,7 +24,6 @@ ticker = st.sidebar.text_input("証券コード (例: 7203)", value="7203")
 analyze_btn = st.sidebar.button("分析開始", type="primary")
 
 # Main Area
-# Main Area
 if analyze_btn:
     with st.spinner("財務データを取得中..."):
         # Fetch Data
@@ -59,8 +58,8 @@ if analyze_btn:
             if total_assets == 0:
                 st.warning("データが見つかりませんでした。")
             else:
-                # Layout
-                col1, col2 = st.columns([2, 1])
+                # Layout (3:1 ratio as requested)
+                col1, col2 = st.columns([3, 1])
                 
                 with col1:
                     # Card Wrapper Start
@@ -90,11 +89,16 @@ if analyze_btn:
                         barmode='stack',
                         showlegend=True,
                         height=500,
-                        margin=dict(l=20, r=20, t=30, b=20),
+                        margin=dict(l=10, r=10, t=30, b=10), # Tight margins
                         paper_bgcolor='rgba(0,0,0,0)',
                         plot_bgcolor='rgba(0,0,0,0)',
-                        font=dict(size=14, family="Noto Sans JP", color="#333"),
-                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                        font=dict(size=14, family="Noto Sans JP", color="#333333"), # Dark text
+                        legend=dict(
+                            orientation="h", 
+                            yanchor="bottom", y=1.02, 
+                            xanchor="right", x=1,
+                            font=dict(color="#333333") # Explicit legend color
+                        )
                     )
                     st.plotly_chart(fig, use_container_width=True)
                     st.markdown('</div>', unsafe_allow_html=True) # Card End
