@@ -70,8 +70,13 @@ if analyze_btn:
                         return dict(color=color, cornerradius=15) 
 
                     # Assets Column (Left) - Professional Blue Theme
-                    fig.add_trace(go.Bar(name='流動資産', x=['資産'], y=[ca], marker=rounded_marker('#4FC3F7'), text=fmt(ca), textposition='auto', hovertemplate='流動資産: %{y:,.0f}<extra></extra>'))
+                    # Stack Order: Bottom -> Top
+                    # User requested: Fixed Assets (Bottom), Current Assets (Top)
+                    
+                    # Non-current Assets: Medium Blue (Base)
                     fig.add_trace(go.Bar(name='固定資産', x=['資産'], y=[nca], marker=rounded_marker('#0288D1'), text=fmt(nca), textposition='auto', hovertemplate='固定資産: %{y:,.0f}<extra></extra>'))
+                    # Current Assets: Light Blue (Top)
+                    fig.add_trace(go.Bar(name='流動資産', x=['資産'], y=[ca], marker=rounded_marker('#4FC3F7'), text=fmt(ca), textposition='auto', hovertemplate='流動資産: %{y:,.0f}<extra></extra>'))
                     
                     # Liabilities (Right) - Order: NetAssets(Bottom) -> Fixed -> Current
                     fig.add_trace(go.Bar(name='純資産', x=['負債・純資産'], y=[na], marker=rounded_marker('#01579B'), text=fmt(na), textposition='auto', hovertemplate='純資産: %{y:,.0f}<extra></extra>'))
@@ -83,9 +88,20 @@ if analyze_btn:
                         showlegend=True,
                         height=500,
                         margin=dict(l=20, r=20, t=30, b=20),
-                        paper_bgcolor='white', # Match card white
+                        paper_bgcolor='white', 
                         plot_bgcolor='white',
                         font=dict(size=14, family="Noto Sans JP", color="#333333"),
+                        # Explicitly style axes to ensure visibility
+                        xaxis=dict(
+                            tickfont=dict(color="#333333", size=14, family="Noto Sans JP"),
+                            linecolor="#e0e0e0"
+                        ),
+                        yaxis=dict(
+                            tickfont=dict(color="#333333"),
+                            title=dict(font=dict(color="#333333")),
+                            showgrid=True,
+                            gridcolor="#f0f0f0"
+                        ),
                         legend=dict(
                             orientation="h", 
                             yanchor="bottom", y=1.02, 
