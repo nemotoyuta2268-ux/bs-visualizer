@@ -305,7 +305,7 @@ def fetch_financial_data(ticker_code, progress_callback=None):
         nca = get_val_by_tag(["NonCurrentAssets", "AssetsNonCurrent"], soup)
         cl = get_val_by_tag(["CurrentLiabilities", "LiabilitiesCurrent"], soup)
         ncl = get_val_by_tag(["NonCurrentLiabilities", "LiabilitiesNonCurrent"], soup)
-        na = get_val_by_tag(["NetAssets", "Equity", "TotalNetAssets"], soup)
+        na = get_val_by_tag(["NetAssets", "Equity", "TotalNetAssets", "EquityAttributableToOwnersOfParent"], soup)
         
         # Fetch Totals for Validation
         # Added TotalAssets, TotalLiabilities for robustness
@@ -329,7 +329,7 @@ def fetch_financial_data(ticker_code, progress_callback=None):
         
         # 2. Receivables (Notes & Accounts vs Separated)
         receivables = get_or_sum(
-            ["NotesAndAccountsReceivableTrade", "NotesAndAccountsReceivable"], 
+            ["NotesAndAccountsReceivableTrade", "NotesAndAccountsReceivable", "TradeAndOtherReceivables"], 
             [["NotesReceivableTrade", "NotesReceivable"], ["AccountsReceivableTrade", "AccountsReceivable"]],
             soup
         )
@@ -346,7 +346,7 @@ def fetch_financial_data(ticker_code, progress_callback=None):
         
         # 5. Intangible & Investments
         intangible = get_val_by_tag(["IntangibleAssets", "IntangibleFixedAssets"], soup)
-        investments = get_val_by_tag(["InvestmentsAndOtherAssets", "InvestmentSecurities"], soup)
+        investments = get_val_by_tag(["InvestmentsAndOtherAssets", "InvestmentSecurities", "OtherFinancialAssets"], soup)
 
         # 6. Interest Bearing Debt (Summation)
         debt_tags = [
@@ -356,7 +356,8 @@ def fetch_financial_data(ticker_code, progress_callback=None):
             ["BondsPayable", "Bonds"],
             ["CommercialPapersLiabilities", "CommercialPapers"],
             ["CurrentPortionOfLongTermLoansPayable", "CurrentPortionOfLongTermLoans"],
-            ["ConvertibleBondsTypeBondsPayable", "ConvertibleBonds"]
+            ["ConvertibleBondsTypeBondsPayable", "ConvertibleBonds"],
+            ["BondsAndBorrowings"] # IFRS Aggregate
         ]
         interest_bearing_debt = 0
         for tags in debt_tags:
