@@ -229,15 +229,22 @@ def fetch_financial_data(ticker_code, progress_callback=None):
         zip_ref.extractall(extract_dir)
         
     # Find .xbrl file
-    xbrl_file = None
+    candidates = []
     for root, dirs, files in os.walk(extract_dir):
         for file in files:
             if file.endswith(".xbrl") and "Cc" not in file:
                 if "PublicDoc" in root:
-                    xbrl_file = os.path.join(root, file)
-                    break
-        if xbrl_file: 
-            break
+                    candidates.append(os.path.join(root, file))
+    
+    xbrl_file = None
+    if candidates:
+        # Prioritize files NOT containing 'ssr' (Summary) or 'sum'
+        # e.g. jpcrp030000-ssr... is summary.
+        main_files = [f for f in candidates if "ssr" not in os.path.basename(f).lower()]
+        if main_files:
+            xbrl_file = main_files[0]
+        else:
+            xbrl_file = candidates[0]
             
     if not xbrl_file:
          return {"error": "XBRL file not found in archive"}
@@ -274,11 +281,11 @@ def fetch_financial_data(ticker_code, progress_callback=None):
                 
                 score = 0
                 # Base scoring on period
-                if "Prior" in context_ref:
+                if "Prior" in context_ref or "FilingDate" in context_ref:
                     score = 0
-                elif "CurrentYearInstant" in context_ref or "CurrentQuarterInstant" in context_ref:
+                elif "CurrentYearInstant" in context_ref or "CurrentQuarterInstant" in context_ref or "InterimInstant" in context_ref:
                     score = 10
-                elif "CurrentYear" in context_ref or "CurrentQuarter" in context_ref:
+                elif "CurrentYear" in context_ref or "CurrentQuarter" in context_ref or "InterimDuration" in context_ref:
                     score = 5
                 elif "Instant" in context_ref: # Generic Instant (often matches IFRS contexts)
                     score = 3
@@ -307,11 +314,11 @@ def fetch_financial_data(ticker_code, progress_callback=None):
         nca = get_val_by_tag(["NonCurrentAssets", "AssetsNonCurrent"], soup)
         cl = get_val_by_tag(["CurrentLiabilities", "LiabilitiesCurrent"], soup)
         ncl = get_val_by_tag(["NonCurrentLiabilities", "LiabilitiesNonCurrent"], soup)
-        na = get_val_by_tag(["NetAssets", "Equity", "TotalNetAssets", "EquityAttributableToOwnersOfParent"], soup)
+        na = get_val_by_tag(["NetAssets", "Equity", "TotalNetAssets", "EquityAttributableToOwnersOfParent", "EquityAttributableToOwnersOfParentIFRSSummaryOfBusinessResults"], soup)
         
         # Fetch Totals for Validation
         # Added TotalAssets, TotalLiabilities for robustness
-        total_assets = get_val_by_tag(["Assets", "TotalAssets"], soup)
+        total_assets = get_val_by_tag(["Assets", "TotalAssets", "TotalAssetsIFRSSummaryOfBusinessResults"], soup)
         total_liabilities = get_val_by_tag(["Liabilities", "TotalLiabilities"], soup)
 
         # --- Detailed Extraction for Drill-down ---
