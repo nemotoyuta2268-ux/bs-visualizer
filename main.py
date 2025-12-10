@@ -5,7 +5,7 @@ from utils import fetch_financial_data
 
 # Page Config
 st.set_page_config(
-    page_title="貸借対照表（B/S）ビジュアライザー",
+    page_title="貸借対照表（B/S）可視化ツール",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -127,7 +127,7 @@ def render_company_analysis(ticker, data, key_suffix="", show_metrics=True):
         st.plotly_chart(fig, use_container_width=True, key=f"chart_{ticker}_{key_suffix}")
 
 # Application Header
-st.title("📊 貸借対照表（B/S）ビジュアライザー")
+st.title("📊 貸借対照表（B/S）可視化ツール")
 st.markdown("証券コードを入力して、企業の財務健全性を可視化します。")
 
 # Sidebar
