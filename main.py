@@ -265,10 +265,6 @@ if analyze_btn:
         import concurrent.futures
 
         # Progress Logic for Parallel Fetch
-        # We can't easily share the single progress bar with granular updates from two threads.
-        # So we'll disable granular progress inside the function for the parallel run 
-        # and just show a global spinner/progress.
-        
         progress_bar = st.progress(0, text="データ取得を開始します...")
         
         def fetch_wrapper(t):
@@ -290,7 +286,7 @@ if analyze_btn:
             progress_bar.progress(100, text="完了")
         
         else:
-            # Single mode: Use granular progress
+            # Single mode
             def update_ui_progress(percent, text):
                 progress_bar.progress(percent, text=text)
             
@@ -298,98 +294,114 @@ if analyze_btn:
         
         progress_bar.empty()
         
-        # Render
-        if compare_mode and data2:
-            # Side by side Comparison - Charts Only
-            main_col1, main_col2 = st.columns(2)
-            
-            with main_col1:
-                render_company_analysis(ticker1, data1, "1", show_metrics=False)
-                
-            with main_col2:
-                render_company_analysis(ticker2, data2, "2", show_metrics=False)
-            
-            # Unified Comparison Summary
-            st.markdown("---")
-            st.subheader("📊 比較分析サマリー")
-            
-            # Calculate Metrics
-            def get_metrics(d):
-                ta = d.get("TotalAssets", 0)
-                na = d.get("NetAssets", 0)
-                ca = d.get("CurrentAssets", 0)
-                cl = d.get("CurrentLiabilities", 0)
-                er = (na / ta * 100) if ta > 0 else 0
-                cr = (ca / cl * 100) if cl > 0 else 0
-                return ta, na, er, cr
+        # Save to Session State
+        st.session_state["data1"] = data1
+        st.session_state["data2"] = data2
+        st.session_state["res_ticker1"] = ticker1
+        st.session_state["res_ticker2"] = ticker2
+        st.session_state["res_compare_mode"] = compare_mode
+        st.session_state["analyzed"] = True
 
-            ta1, na1, er1, cr1 = get_metrics(data1)
-            ta2, na2, er2, cr2 = get_metrics(data2)
-            
-            # Generate Insight
-            c1_name = data1.get('CompanyName')
-            c2_name = data2.get('CompanyName')
-            
-            insight = ""
-            # Size
-            if ta1 > ta2 * 1.5:
-                insight += f"<li>規模: <strong>{c1_name}</strong> は {c2_name} よりも資産規模が大きく上回っています。</li>"
-            elif ta2 > ta1 * 1.5:
-                insight += f"<li>規模: <strong>{c2_name}</strong> は {c1_name} よりも資産規模が大きく上回っています。</li>"
-            else:
-                insight += f"<li>規模: 両社の資産規模は比較的近いです。</li>"
-                
-            # Safety
-            if er1 > er2 + 10:
-                insight += f"<li>安全性: <strong>{c1_name}</strong> (自己資本比率 {er1:.1f}%) の方が財務的な安全性が高いです。</li>"
-            elif er2 > er1 + 10:
-                insight += f"<li>安全性: <strong>{c2_name}</strong> (自己資本比率 {er2:.1f}%) の方が財務的な安全性が高いです。</li>"
-            else:
-                insight += f"<li>安全性: 両社の財務安全性（自己資本比率）は同水準です。</li>"
+# Render based on Session State
+if st.session_state.get("analyzed"):
+    data1 = st.session_state.get("data1")
+    data2 = st.session_state.get("data2")
+    res_ticker1 = st.session_state.get("res_ticker1")
+    res_ticker2 = st.session_state.get("res_ticker2")
+    res_compare_mode = st.session_state.get("res_compare_mode")
 
-            # Table HTML
-            def fmt_val(v): return f"{v/100000000:,.0f}億円"
+    # Render
+    if res_compare_mode and data2:
+        # Side by side Comparison - Charts Only
+        main_col1, main_col2 = st.columns(2)
+        
+        with main_col1:
+            render_company_analysis(res_ticker1, data1, "1", show_metrics=False)
             
-            st.markdown(f"""
-            <div class="material-card">
-                <table style="width:100%; border-collapse: collapse;">
-                    <tr style="border-bottom: 2px solid #eee;">
-                        <th style="text-align:left; padding:10px; color:#666;">項目</th>
-                        <th style="text-align:right; padding:10px; color:#333;">{c1_name}</th>
-                        <th style="text-align:right; padding:10px; color:#333;">{c2_name}</th>
-                        <th style="text-align:center; padding:10px; color:#999;">判定</th>
-                    </tr>
-                    <tr style="border-bottom: 1px solid #f0f0f0;">
-                        <td style="padding:10px; font-weight:bold; color:#0277BD;">資産合計 (Size)</td>
-                        <td style="text-align:right; padding:10px;">{fmt_val(ta1)}</td>
-                        <td style="text-align:right; padding:10px;">{fmt_val(ta2)}</td>
-                        <td style="text-align:center; padding:10px;">{"👈 Larger" if ta1 > ta2 else "Larger 👉"}</td>
-                    </tr>
-                    <tr style="border-bottom: 1px solid #f0f0f0;">
-                        <td style="padding:10px; font-weight:bold; color:#0277BD;">自己資本比率 (Safety)</td>
-                        <td style="text-align:right; padding:10px;">{er1:.1f}%</td>
-                        <td style="text-align:right; padding:10px;">{er2:.1f}%</td>
-                        <td style="text-align:center; padding:10px;">{"👈 High" if er1 > er2 else "High 👉"}</td>
-                    </tr>
-                    <tr style="border-bottom: 1px solid #f0f0f0;">
-                        <td style="padding:10px; font-weight:bold; color:#0277BD;">流動比率 (Liquidity)</td>
-                        <td style="text-align:right; padding:10px;">{cr1:.1f}%</td>
-                        <td style="text-align:right; padding:10px;">{cr2:.1f}%</td>
-                        <td style="text-align:center; padding:10px;">{"👈 High" if cr1 > cr2 else "High 👉"}</td>
-                    </tr>
-                </table>
-                <div style="margin-top: 20px; background-color: #E1F5FE; padding: 15px; border-radius: 8px;">
-                    <h5 style="margin:0 0 10px 0; color:#01579B;">比較コメント</h5>
-                    <ul style="margin:0; padding-left:20px; line-height:1.6; color:#0277BD;">
-                        {insight}
-                    </ul>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+        with main_col2:
+            render_company_analysis(res_ticker2, data2, "2", show_metrics=False)
+        
+        # Unified Comparison Summary
+        st.markdown("---")
+        st.subheader("📊 比較分析サマリー")
+        
+        # Calculate Metrics
+        def get_metrics(d):
+            ta = d.get("TotalAssets", 0)
+            na = d.get("NetAssets", 0)
+            ca = d.get("CurrentAssets", 0)
+            cl = d.get("CurrentLiabilities", 0)
+            er = (na / ta * 100) if ta > 0 else 0
+            cr = (ca / cl * 100) if cl > 0 else 0
+            return ta, na, er, cr
 
+        ta1, na1, er1, cr1 = get_metrics(data1)
+        ta2, na2, er2, cr2 = get_metrics(data2)
+        
+        # Generate Insight
+        c1_name = data1.get('CompanyName')
+        c2_name = data2.get('CompanyName')
+        
+        insight = ""
+        # Size
+        if ta1 > ta2 * 1.5:
+            insight += f"<li>規模: <strong>{c1_name}</strong> は {c2_name} よりも資産規模が大きく上回っています。</li>"
+        elif ta2 > ta1 * 1.5:
+            insight += f"<li>規模: <strong>{c2_name}</strong> は {c1_name} よりも資産規模が大きく上回っています。</li>"
         else:
-            # Single View
-            render_company_analysis(ticker1, data1, "1", show_metrics=True)
+            insight += f"<li>規模: 両社の資産規模は比較的近いです。</li>"
+            
+        # Safety
+        if er1 > er2 + 10:
+            insight += f"<li>安全性: <strong>{c1_name}</strong> (自己資本比率 {er1:.1f}%) の方が財務的な安全性が高いです。</li>"
+        elif er2 > er1 + 10:
+            insight += f"<li>安全性: <strong>{c2_name}</strong> (自己資本比率 {er2:.1f}%) の方が財務的な安全性が高いです。</li>"
+        else:
+            insight += f"<li>安全性: 両社の財務安全性（自己資本比率）は同水準です。</li>"
+
+        # Table HTML
+        def fmt_val(v): return f"{v/100000000:,.0f}億円"
+        
+        st.markdown(f"""
+        <div class="material-card">
+            <table style="width:100%; border-collapse: collapse;">
+                <tr style="border-bottom: 2px solid #eee;">
+                    <th style="text-align:left; padding:10px; color:#666;">項目</th>
+                    <th style="text-align:right; padding:10px; color:#333;">{c1_name}</th>
+                    <th style="text-align:right; padding:10px; color:#333;">{c2_name}</th>
+                    <th style="text-align:center; padding:10px; color:#999;">判定</th>
+                </tr>
+                <tr style="border-bottom: 1px solid #f0f0f0;">
+                    <td style="padding:10px; font-weight:bold; color:#0277BD;">資産合計 (Size)</td>
+                    <td style="text-align:right; padding:10px;">{fmt_val(ta1)}</td>
+                    <td style="text-align:right; padding:10px;">{fmt_val(ta2)}</td>
+                    <td style="text-align:center; padding:10px;">{"👈 Larger" if ta1 > ta2 else "Larger 👉"}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #f0f0f0;">
+                    <td style="padding:10px; font-weight:bold; color:#0277BD;">自己資本比率 (Safety)</td>
+                    <td style="text-align:right; padding:10px;">{er1:.1f}%</td>
+                    <td style="text-align:right; padding:10px;">{er2:.1f}%</td>
+                    <td style="text-align:center; padding:10px;">{"👈 High" if er1 > er2 else "High 👉"}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #f0f0f0;">
+                    <td style="padding:10px; font-weight:bold; color:#0277BD;">流動比率 (Liquidity)</td>
+                    <td style="text-align:right; padding:10px;">{cr1:.1f}%</td>
+                    <td style="text-align:right; padding:10px;">{cr2:.1f}%</td>
+                    <td style="text-align:center; padding:10px;">{"👈 High" if cr1 > cr2 else "High 👉"}</td>
+                </tr>
+            </table>
+            <div style="margin-top: 20px; background-color: #E1F5FE; padding: 15px; border-radius: 8px;">
+                <h5 style="margin:0 0 10px 0; color:#01579B;">比較コメント</h5>
+                <ul style="margin:0; padding-left:20px; line-height:1.6; color:#0277BD;">
+                    {insight}
+                </ul>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    else:
+        # Single View
+        render_company_analysis(res_ticker1, data1, "1", show_metrics=True)
 
 else:
     # Empty State with Animation
