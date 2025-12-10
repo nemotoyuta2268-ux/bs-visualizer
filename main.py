@@ -160,6 +160,11 @@ def render_company_analysis(ticker, data, key_suffix="", show_metrics=True):
             equity_ratio = (na / total_assets) * 100 if total_assets > 0 else 0
             current_ratio = (ca / cl) * 100 if cl > 0 else 0
             
+            # Profitability Metrics
+            net_income = data.get("NetIncome", 0)
+            roe = (net_income / na * 100) if na > 0 else 0
+            roa = (net_income / total_assets * 100) if total_assets > 0 else 0
+            
             st.markdown(f"""<div class="material-card" style="padding: 20px; text-align: left;">
 <h4 style="margin: 0 0 15px 0; color: #333;">主要指標</h4>
 <div style="margin-bottom: 12px;">
@@ -170,6 +175,18 @@ def render_company_analysis(ticker, data, key_suffix="", show_metrics=True):
 <div style="color: #666; font-size: 0.85em;">流動比率</div>
 <div style="color: #333; font-size: 1.25em; font-weight: bold;">{current_ratio:.1f}%</div>
 </div>
+
+<div style="display:flex; justify-content:space-between; margin-bottom: 12px;">
+    <div>
+        <div style="color: #666; font-size: 0.85em;">ROE</div>
+        <div style="color: #333; font-size: 1.25em; font-weight: bold;">{roe:.1f}%</div>
+    </div>
+    <div style="text-align:right;">
+        <div style="color: #666; font-size: 0.85em;">ROA</div>
+        <div style="color: #333; font-size: 1.25em; font-weight: bold;">{roa:.1f}%</div>
+    </div>
+</div>
+
 <hr style="margin: 15px 0; border-top: 1px solid #eee;">
 <div style="margin-bottom: 12px;">
 <div style="color: #666; font-size: 0.85em;">資産合計</div>

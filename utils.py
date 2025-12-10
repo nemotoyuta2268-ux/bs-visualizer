@@ -400,6 +400,13 @@ def fetch_financial_data(ticker_code, progress_callback=None):
         total_assets = get_val_by_tag(["Assets", "TotalAssets", "TotalAssetsIFRSSummaryOfBusinessResults"], soup)
         total_liabilities = get_val_by_tag(["Liabilities", "TotalLiabilities", "TotalLiabilitiesIFRSSummaryOfBusinessResults"], soup)
         
+        # --- P/L Data for ROE/ROA ---
+        # Net Income (Priority: Attributable > Profit > NetIncome)
+        net_income = get_val_by_tag(["ProfitLossAttributableToOwnersOfParent", "ProfitLossAttributableToOwnersOfParentIFRSSummaryOfBusinessResults", "Profit", "CurrentNetIncome", "NetIncome", "ProfitLoss"], soup)
+        
+        # Sales
+        sales = get_val_by_tag(["NetSales", "Sales", "Revenue", "OperatingRevenues", "RevenueIFRSSummaryOfBusinessResults"], soup)
+        
         # ------------------------------------------
         
         # Logic to ensure balance and fill gaps
@@ -455,6 +462,8 @@ def fetch_financial_data(ticker_code, progress_callback=None):
         data["Investments"] = investments
         data["InterestDebt"] = interest_bearing_debt
         data["RetainedEarnings"] = retained_earnings
+        data["NetIncome"] = net_income
+        data["Sales"] = sales
 
         update_progress(1.0, "完了")
         return data
