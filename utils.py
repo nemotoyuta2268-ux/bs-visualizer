@@ -281,7 +281,7 @@ def fetch_financial_data(ticker_code, progress_callback=None):
                 
                 score = 0
                 # Base scoring on period
-                if "Prior" in context_ref or "FilingDate" in context_ref:
+                if "Prior" in context_ref:
                     score = 0
                 elif "CurrentYearInstant" in context_ref or "CurrentQuarterInstant" in context_ref or "InterimInstant" in context_ref:
                     score = 10
@@ -308,56 +308,43 @@ def fetch_financial_data(ticker_code, progress_callback=None):
         data = {}
         data["CompanyName"] = company_name
         data["Industry"] = industry
-        
-        # Fetch Components
-        ca = get_val_by_tag(["CurrentAssets", "AssetsCurrent", "CurrentAssetsIFRSSummaryOfBusinessResults"], soup)
-        nca = get_val_by_tag(["NonCurrentAssets", "AssetsNonCurrent", "NonCurrentAssetsIFRSSummaryOfBusinessResults"], soup)
-        cl = get_val_by_tag(["CurrentLiabilities", "LiabilitiesCurrent", "CurrentLiabilitiesIFRSSummaryOfBusinessResults"], soup)
-        ncl = get_val_by_tag(["NonCurrentLiabilities", "LiabilitiesNonCurrent", "NonCurrentLiabilitiesIFRSSummaryOfBusinessResults"], soup)
-        na = get_val_by_tag(["NetAssets", "Equity", "TotalNetAssets", "EquityAttributableToOwnersOfParent", "EquityAttributableToOwnersOfParentIFRSSummaryOfBusinessResults"], soup)
-        
-        # Fetch Totals for Validation
-        # Added TotalAssets, TotalLiabilities for robustness
-        total_assets = get_val_by_tag(["Assets", "TotalAssets", "TotalAssetsIFRSSummaryOfBusinessResults"], soup)
-        total_liabilities = get_val_by_tag(["Liabilities", "TotalLiabilities"], soup)
 
-        # --- Detailed Extraction for Drill-down ---
         # Helper to get first non-zero or sum of components
         def get_or_sum(primary_tags, component_tags_list, soup):
             val = get_val_by_tag(primary_tags, soup)
             if val == 0 and component_tags_list:
-                # If primary is missing, try summing components
                 running_sum = 0
                 for tags in component_tags_list:
                     running_sum += get_val_by_tag(tags, soup)
                 val = running_sum
             return val
 
-        # 1. Cash (Cash & Deposits or Cash Equivalents)
+        # --- Detailed Extraction (Bottom-Up Source) ---
+        # 1. Cash
         cash = get_val_by_tag(["CashAndDeposits", "CashAndCashEquivalents", "Cash"], soup)
         
-        # 2. Receivables (Notes & Accounts vs Separated)
+        # 2. Receivables
         receivables = get_or_sum(
             ["NotesAndAccountsReceivableTrade", "NotesAndAccountsReceivable", "TradeAndOtherReceivables", "TradeReceivables"], 
             [["NotesReceivableTrade", "NotesReceivable"], ["AccountsReceivableTrade", "AccountsReceivable"]],
             soup
         )
         
-        # 3. Inventory (Total vs Components)
+        # 3. Inventory
         inventory = get_or_sum(
             ["Inventories"],
             [["MerchandiseAndFinishedGoods", "Merchandise"], ["WorkInProcess"], ["RawMaterialsAndSupplies", "RawMaterials"]],
             soup
         )
         
-        # 4. PPE (Property Plant and Equipment)
+        # 4. PPE
         ppe = get_val_by_tag(["PropertyPlantAndEquipment", "TangibleFixedAssets", "PropertyPlantAndEquipmentAndRightOfUseAssets"], soup)
         
         # 5. Intangible & Investments
         intangible = get_val_by_tag(["IntangibleAssets", "IntangibleFixedAssets", "IntangibleAssetsAndGoodwill"], soup)
         investments = get_val_by_tag(["InvestmentsAndOtherAssets", "InvestmentSecurities", "OtherFinancialAssets"], soup)
 
-        # 6. Interest Bearing Debt (Summation)
+        # 6. Debt Details
         debt_tags = [
             ["ShortTermLoansPayable", "ShortTermLoans"],
             ["LongTermLoansPayable", "LongTermLoans"],
@@ -366,16 +353,48 @@ def fetch_financial_data(ticker_code, progress_callback=None):
             ["CommercialPapersLiabilities", "CommercialPapers"],
             ["CurrentPortionOfLongTermLoansPayable", "CurrentPortionOfLongTermLoans"],
             ["ConvertibleBondsTypeBondsPayable", "ConvertibleBonds"],
-            ["BondsAndBorrowings"], # IFRS Aggregate
-            ["LeaseLiabilities"],   # IFRS
-            ["OtherFinancialLiabilities"] # IFRS Broad
+            ["BondsAndBorrowings"], 
+            ["LeaseLiabilities"],
+            ["OtherFinancialLiabilities"]
         ]
         interest_bearing_debt = 0
         for tags in debt_tags:
             interest_bearing_debt += get_val_by_tag(tags, soup)
-
-        # 7. Retained Earnings
+            
         retained_earnings = get_val_by_tag(["RetainedEarnings"], soup)
+        
+        # --- Others for Bottom-Up Summation ---
+        other_ca = get_val_by_tag(["OtherCurrentAssets", "OtherAssetsCurrent"], soup)
+        other_nca = get_val_by_tag(["OtherNonCurrentAssets", "OtherAssetsNonCurrent"], soup)
+        other_cl = get_val_by_tag(["OtherCurrentLiabilities", "OtherLiabilitiesCurrent"], soup)
+        other_ncl = get_val_by_tag(["OtherNonCurrentLiabilities", "OtherLiabilitiesNonCurrent"], soup)
+
+        # --- High Level Components (with Fallback to Bottom-Up) ---
+        # CA
+        ca = get_val_by_tag(["CurrentAssets", "AssetsCurrent", "CurrentAssetsIFRSSummaryOfBusinessResults"], soup)
+        if ca == 0:
+            ca = cash + receivables + inventory + other_ca
+            
+        # NCA
+        nca = get_val_by_tag(["NonCurrentAssets", "AssetsNonCurrent", "NonCurrentAssetsIFRSSummaryOfBusinessResults"], soup)
+        if nca == 0:
+            nca = ppe + intangible + investments + other_nca
+            
+        # CL
+        cl = get_val_by_tag(["CurrentLiabilities", "LiabilitiesCurrent", "CurrentLiabilitiesIFRSSummaryOfBusinessResults"], soup)
+        if cl == 0:
+            # Approx logic if CL is missing (harder to reconstruct perfectly due to many misc debts)
+            # Use debt parts? Not all debt is CL.
+            # Just rely on Other + knowns?
+            cl = other_cl # Weak, but better than 0? usually CL matches Total - NCL.
+            
+        # NCL
+        ncl = get_val_by_tag(["NonCurrentLiabilities", "LiabilitiesNonCurrent", "NonCurrentLiabilitiesIFRSSummaryOfBusinessResults"], soup)
+        if ncl == 0:
+            ncl = other_ncl
+
+        # NA
+        na = get_val_by_tag(["NetAssets", "Equity", "TotalNetAssets", "EquityAttributableToOwnersOfParent", "EquityAttributableToOwnersOfParentIFRSSummaryOfBusinessResults"], soup)
         # ------------------------------------------
         
         # Logic to ensure balance and fill gaps
